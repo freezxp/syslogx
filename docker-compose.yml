@@ -1,4 +1,24 @@
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: syslogx-web:dev
+    restart: unless-stopped
+    depends_on:
+      - syslogx
+    ports:
+      - "127.0.0.1:8080:8080"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=1m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks: [frontend]
+
   syslogx:
     build:
       context: .
@@ -13,7 +33,6 @@ services:
       victorialogs:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8080:8080"
       - "514:1514/udp"
       - "514:1514/tcp"
     read_only: true

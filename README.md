@@ -2,7 +2,7 @@
 
 Syslogx is a production-oriented syslog ingestion and log analytics platform. Phase 1 provides configurable RFC 3164/RFC 5424 ingestion over UDP and TCP, bounded batching and retry, VictoriaLogs storage, PostgreSQL control-plane foundations, health/readiness checks, and Prometheus metrics.
 
-The React log explorer, HTTP JSON ingestion, authentication, full query API, exports, saved searches, and live tail are planned in later phases. See [the roadmap](docs/roadmap.md).
+A dark-first React operations console provides a dashboard, bounded recent-log explorer, dynamic event details, source overview, and system readiness. HTTP JSON ingestion, authentication, the full historical query API, exports, saved searches, and live SSE tail remain planned phases. See [the roadmap](docs/roadmap.md).
 
 ## Quick start
 
@@ -13,6 +13,8 @@ docker compose up -d --build
 docker compose ps
 curl http://127.0.0.1:8080/ready
 ```
+
+Open the web console at [http://127.0.0.1:8080](http://127.0.0.1:8080).
 
 Send a message:
 
