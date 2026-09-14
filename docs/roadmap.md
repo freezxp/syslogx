@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: Phase 1 implementation active; Phase 0 review approved 2026-09-14
+Status: Phases 0–4 implemented; Phase 5 is next (2026-09-14)
 
 ## Delivery rules
 
@@ -68,6 +68,8 @@ Gate: 10K events/s reference run, no application-level drops under nominal profi
 
 ## Phase 2 — HTTP JSON and identity
 
+Status: complete for the Phase 2 scope. Cookie sessions, bootstrap authentication/RBAC boundary, object/array/NDJSON ingestion, size/count limits, and unknown-field preservation are implemented. Persistent user administration and ingestion API keys remain Phase 5 hardening.
+
 ### 2.1 Authentication/control plane
 
 - Users, Argon2id passwords, sessions, CSRF, RBAC policy, bootstrap admin, audit events.
@@ -88,6 +90,8 @@ Requirements: ING-002, ING-003, ING-004, ING-007.
 Benchmark and threat/reliability review determines whether a local disk spool is mandatory before pilot. If built: checksummed segments, quotas, fsync policy, replay, cleanup, corruption tests, and recovery metrics. Do not change `202` semantics silently.
 
 ## Phase 3 — Query and analytics API
+
+Status: complete for the Phase 3 scope. Portable queries, safe VictoriaLogs compilation, cursor pagination, discovery, statistics, bounded export, and SSE tail are implemented. Aggregate pushdown and signed cursors are tracked hardening items.
 
 ### 3.1 Portable query service
 
@@ -113,6 +117,8 @@ Requirements: QRY-004, QRY-005.
 Requirements: QRY-002, QRY-006, QRY-008.
 
 ## Phase 4 — Web experience
+
+Status: complete. The web console includes the dashboard, visual/native explorer, preset/custom ranges, URL query state, dynamic fields, virtualized table, detail drawer, export, saved searches, and bounded SSE live tail.
 
 ### 4.1 Design system and application shell
 

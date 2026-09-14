@@ -1,11 +1,50 @@
 openapi: 3.1.0
 info:
   title: Syslogx API
-  version: 0.1.0
-  description: Phase 1 operational API. Search, authentication, and ingestion contracts are added in later phases.
+  version: 0.4.0
+  description: Syslogx ingestion, search, analytics, identity, export, and live-tail API.
 servers:
   - url: /
 paths:
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Login'}}}}
+      responses: {'200': {description: Session created}, '401': {description: Invalid credentials}}
+  /api/v1/auth/logout:
+    post: {operationId: logout, responses: {'204': {description: Session removed}}}
+  /api/v1/auth/me:
+    get: {operationId: getCurrentUser, responses: {'200': {description: Current identity}, '401': {description: Authentication required}}}
+  /api/v1/ingest:
+    post:
+      operationId: ingestJSON
+      description: Accepts a JSON object, JSON array, or application/x-ndjson stream. Unknown fields are preserved.
+      requestBody: {required: true, content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/IngestLog'}, {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/IngestLog'}}]}}, application/x-ndjson: {schema: {type: string}}}}
+      responses: {'202': {description: Batch accepted}, '400': {description: Invalid input}, '413': {description: Limit exceeded}}
+  /api/v1/logs/search:
+    post: {$ref: '#/components/pathItems/Query'}
+  /api/v1/logs/stats:
+    post: {$ref: '#/components/pathItems/Query'}
+  /api/v1/fields:
+    post: {$ref: '#/components/pathItems/Query'}
+  /api/v1/fields/{field}/values:
+    post:
+      parameters: [{name: field, in: path, required: true, schema: {type: string}}]
+      requestBody: {$ref: '#/components/requestBodies/Query'}
+      responses: {'200': {description: Value counts}, '400': {description: Invalid query}}
+  /api/v1/logs/export:
+    post:
+      parameters: [{name: format, in: query, schema: {type: string, enum: [json, csv, ndjson]}}]
+      requestBody: {$ref: '#/components/requestBodies/Query'}
+      responses: {'200': {description: Bounded streamed export}, '400': {description: Invalid query}}
+  /api/v1/logs/tail:
+    get:
+      description: Server-Sent Events stream with a bounded server query and client buffer.
+      parameters: [{name: query, in: query, schema: {type: string, maxLength: 4096}}]
+      responses: {'200': {description: SSE event stream, content: {text/event-stream: {schema: {type: string}}}}}
+  /api/v1/saved-searches:
+    get: {responses: {'200': {description: Saved searches}}}
+    post: {responses: {'201': {description: Saved search created}, '400': {description: Invalid input}}}
   /health:
     get:
       operationId: getHealth
@@ -45,7 +84,37 @@ paths:
         '400': {description: Invalid limit}
         '502': {description: Storage unavailable}
 components:
+  pathItems:
+    Query:
+      requestBody: {$ref: '#/components/requestBodies/Query'}
+      responses: {'200': {description: Query result}, '400': {description: Invalid query}}
+  requestBodies:
+    Query: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/LogQuery'}}}}
   schemas:
+    Login:
+      type: object
+      required: [username, password]
+      properties: {username: {type: string}, password: {type: string, format: password}}
+    IngestLog:
+      type: object
+      required: [message]
+      properties: {timestamp: {type: string, format: date-time}, message: {type: string}, hostname: {type: string}, level: {type: string}, service: {type: string}}
+      additionalProperties: true
+    Filter:
+      type: object
+      required: [field, operator]
+      properties: {field: {type: string}, operator: {type: string, enum: [eq, neq, contains, starts_with, exists, gt, gte, lt, lte]}, value: {}}
+    LogQuery:
+      type: object
+      required: [start, end]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        query: {type: string, maxLength: 4096}
+        native_query: {type: string, maxLength: 8192}
+        filters: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/Filter'}}
+        limit: {type: integer, minimum: 1, maximum: 1000, default: 100}
+        cursor: {type: string}
     Capabilities:
       type: object
       required: [backend, full_text, field_discovery, facets, statistics, live_tail]
