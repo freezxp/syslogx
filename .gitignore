@@ -1,0 +1,10 @@
+.env
+.idea/
+.vscode/
+bin/
+coverage.out
+dist/
+*.log
+*.prof
+victoria-logs-data/
+postgres-data/

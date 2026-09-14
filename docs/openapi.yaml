@@ -1,0 +1,59 @@
+openapi: 3.1.0
+info:
+  title: Syslogx API
+  version: 0.1.0
+  description: Phase 1 operational API. Search, authentication, and ingestion contracts are added in later phases.
+servers:
+  - url: /
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200': {description: Process is live}
+  /ready:
+    get:
+      operationId: getReadiness
+      responses:
+        '200': {description: Required dependencies and ingestion are ready}
+        '503': {description: One or more readiness checks failed}
+  /metrics:
+    get:
+      operationId: getMetrics
+      responses:
+        '200': {description: Prometheus text exposition}
+  /api/v1/capabilities:
+    get:
+      operationId: getCapabilities
+      responses:
+        '200':
+          description: Storage capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capabilities'
+  /api/v1/system/logs/recent:
+    get:
+      operationId: getRecentLogs
+      description: Phase 1 diagnostic endpoint limited to the last 15 minutes; not the final search API.
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 1000, default: 20}
+      responses:
+        '200': {description: Recent logs}
+        '400': {description: Invalid limit}
+        '502': {description: Storage unavailable}
+components:
+  schemas:
+    Capabilities:
+      type: object
+      required: [backend, full_text, field_discovery, facets, statistics, live_tail]
+      properties:
+        backend: {type: string}
+        full_text: {type: boolean}
+        field_discovery: {type: boolean}
+        facets: {type: boolean}
+        statistics: {type: boolean}
+        live_tail: {type: boolean}
+        native_dialect: {type: string}
