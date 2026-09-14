@@ -102,6 +102,10 @@ func (s *Server) recentLogs(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_limit"})
 			return
 		}
+		if n < 1 || n > 1000 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_limit"})
+			return
+		}
 		limit = n
 	}
 	rows, err := s.recent.Recent(r.Context(), limit)
