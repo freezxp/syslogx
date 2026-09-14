@@ -11,7 +11,7 @@ Requirements: Docker with Compose and free host ports 514 TCP/UDP and 8080 TCP.
 ```bash
 docker compose up -d --build
 docker compose ps
-curl http://127.0.0.1:8080/ready
+curl http://192.168.0.55:8080/ready
 ```
 
 Open the web console at [http://192.168.0.55:8080](http://192.168.0.55:8080). The Compose frontend binding uses this host's LAN address so a reverse proxy on the LAN can reach it; update the binding if the host address changes.
