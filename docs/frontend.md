@@ -1,6 +1,6 @@
 # Frontend architecture and UX
 
-Status: Phase 0 design
+Status: Phase 1 operations console implemented; full Phase 4 scope remains planned
 
 ## Stack
 

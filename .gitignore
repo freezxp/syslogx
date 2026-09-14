@@ -4,6 +4,10 @@
 bin/
 coverage.out
 dist/
+node_modules/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 *.log
 *.prof
 victoria-logs-data/
