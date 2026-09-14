@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     image: syslogx-web:dev
+    user: "101:101"
     restart: unless-stopped
     depends_on:
       - syslogx
@@ -11,8 +12,8 @@ services:
       - "192.168.0.55:8080:8080"
     read_only: true
     tmpfs:
-      - /var/cache/nginx:size=16m
-      - /var/run:size=1m
+      - /var/cache/nginx:size=16m,uid=101,gid=101
+      - /var/run:size=1m,uid=101,gid=101
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -55,7 +56,7 @@ services:
     volumes:
       - victorialogs-data:/victoria-logs-data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9428/health"]
+      test: ["CMD", "/victoria-logs-prod", "-version"]
       interval: 5s
       timeout: 3s
       retries: 20
