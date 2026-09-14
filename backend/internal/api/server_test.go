@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -14,10 +15,38 @@ import (
 	"github.com/freezxp/syslogx/backend/internal/storage"
 )
 
-type testBackend struct{ healthy bool }
+type testBackend struct {
+	healthy  bool
+	appended []domain.LogEntry
+}
 
-func (*testBackend) Append(context.Context, []domain.LogEntry) (storage.AppendResult, error) {
-	return storage.AppendResult{}, nil
+func (b *testBackend) Append(_ context.Context, logs []domain.LogEntry) (storage.AppendResult, error) {
+	b.appended = append(b.appended, logs...)
+	return storage.AppendResult{Accepted: len(logs)}, nil
+}
+
+func TestJSONIngestForms(t *testing.T) {
+	for _, tc := range []struct {
+		name, contentType, body string
+		want                    int
+	}{{"single", "application/json", `{"message":"one","hostname":"web01","custom":42}`, 1}, {"array", "application/json", `[{"message":"one"},{"message":"two"}]`, 2}, {"ndjson", "application/x-ndjson", "{\"message\":\"one\"}\n{\"message\":\"two\"}\n", 2}} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &atomic.Bool{}
+			a.Store(true)
+			b := &testBackend{healthy: true}
+			s := New(config.Default().Server.HTTP, b, nil, 0, a, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", tc.contentType)
+			rec := httptest.NewRecorder()
+			s.http.Handler.ServeHTTP(rec, req)
+			if rec.Code != 202 {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if len(b.appended) != tc.want {
+				t.Fatalf("appended=%d want=%d", len(b.appended), tc.want)
+			}
+		})
+	}
 }
 func (b *testBackend) Check(context.Context) storage.Health {
 	return storage.Health{Healthy: b.healthy}

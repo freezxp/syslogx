@@ -9,11 +9,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/freezxp/syslogx/backend/internal/domain"
+	querybuilder "github.com/freezxp/syslogx/backend/internal/query"
 	"github.com/freezxp/syslogx/backend/internal/storage"
 )
 
@@ -124,4 +126,176 @@ func (c *Client) Recent(ctx context.Context, limit int) ([]map[string]any, error
 		}
 	}
 	return rows, s.Err()
+}
+
+func (c *Client) Query(ctx context.Context, q storage.Query) (storage.QueryResult, error) {
+	base, err := querybuilder.LogsQL(q)
+	if err != nil {
+		return storage.QueryResult{}, err
+	}
+	rows, err := c.runQuery(ctx, base+" | sort by (_time) desc | limit "+strconv.Itoa(q.Limit+1))
+	if err != nil {
+		return storage.QueryResult{}, err
+	}
+	result := storage.QueryResult{Data: rows}
+	if len(rows) > q.Limit {
+		result.Data = rows[:q.Limit]
+		result.Truncated = true
+	}
+	if result.Truncated && len(result.Data) > 0 {
+		if t, ok := result.Data[len(result.Data)-1]["_time"].(string); ok {
+			result.NextCursor = querybuilder.Cursor(t)
+		}
+	}
+	return result, nil
+}
+
+func (c *Client) runQuery(ctx context.Context, logsQL string) ([]map[string]any, error) {
+	u := *c.endpoint
+	u.Path = strings.TrimRight(u.Path, "/") + "/select/logsql/query"
+	form := url.Values{"query": {logsQL}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", storage.ErrUnavailable, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("VictoriaLogs query returned %s: %s", resp.Status, strings.TrimSpace(string(b)))
+	}
+	rows := []map[string]any{}
+	s := bufio.NewScanner(resp.Body)
+	s.Buffer(make([]byte, 64<<10), 4<<20)
+	for s.Scan() {
+		var row map[string]any
+		if err := json.Unmarshal(s.Bytes(), &row); err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	return rows, s.Err()
+}
+
+func (c *Client) Stats(ctx context.Context, q storage.Query) (storage.StatsResult, error) {
+	copyQ := q
+	copyQ.Limit = 1000
+	copyQ.Cursor = ""
+	res, err := c.Query(ctx, copyQ)
+	if err != nil {
+		return storage.StatsResult{}, err
+	}
+	out := storage.StatsResult{Total: int64(len(res.Data))}
+	sev := map[string]int64{}
+	hosts := map[string]int64{}
+	apps := map[string]int64{}
+	buckets := map[time.Time]int64{}
+	for _, r := range res.Data {
+		count(sev, r["severity_name"])
+		count(hosts, r["hostname"])
+		count(apps, r["app_name"])
+		if raw, ok := r["_time"].(string); ok {
+			if t, e := time.Parse(time.RFC3339Nano, raw); e == nil {
+				t = t.Truncate(time.Minute)
+				buckets[t]++
+			}
+		}
+	}
+	out.Severities = sortedCounts(sev, 20)
+	out.TopHosts = sortedCounts(hosts, 10)
+	out.TopApplications = sortedCounts(apps, 10)
+	for t, n := range buckets {
+		out.Volume = append(out.Volume, storage.Bucket{Timestamp: t, Count: n})
+	}
+	sort.Slice(out.Volume, func(i, j int) bool { return out.Volume[i].Timestamp.Before(out.Volume[j].Timestamp) })
+	return out, nil
+}
+func count(m map[string]int64, v any) {
+	s := fmt.Sprint(v)
+	if s != "" && s != "<nil>" {
+		m[s]++
+	}
+}
+func sortedCounts(m map[string]int64, limit int) []storage.ValueCount {
+	a := make([]storage.ValueCount, 0, len(m))
+	for k, v := range m {
+		a = append(a, storage.ValueCount{Value: k, Count: v})
+	}
+	sort.Slice(a, func(i, j int) bool { return a[i].Count > a[j].Count })
+	if len(a) > limit {
+		a = a[:limit]
+	}
+	return a
+}
+func (c *Client) FieldNames(ctx context.Context, q storage.Query) ([]storage.FieldInfo, error) {
+	copyQ := q
+	copyQ.Limit = 500
+	res, err := c.Query(ctx, copyQ)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]int64{}
+	for _, r := range res.Data {
+		for k := range r {
+			m[k]++
+		}
+	}
+	out := make([]storage.FieldInfo, 0, len(m))
+	for k, n := range m {
+		out = append(out, storage.FieldInfo{Name: k, Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out, nil
+}
+func (c *Client) FieldValues(ctx context.Context, q storage.Query, field string, limit int) ([]storage.ValueCount, error) {
+	if limit < 1 || limit > 100 {
+		return nil, fmt.Errorf("limit must be between 1 and 100")
+	}
+	copyQ := q
+	copyQ.Limit = 1000
+	res, err := c.Query(ctx, copyQ)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]int64{}
+	for _, r := range res.Data {
+		count(m, r[field])
+	}
+	return sortedCounts(m, limit), nil
+}
+func (c *Client) Export(ctx context.Context, q storage.Query, format string, w io.Writer) error {
+	q.Limit = 1000
+	res, err := c.Query(ctx, q)
+	if err != nil {
+		return err
+	}
+	switch format {
+	case "json":
+		return json.NewEncoder(w).Encode(res.Data)
+	case "ndjson":
+		e := json.NewEncoder(w)
+		for _, r := range res.Data {
+			if err := e.Encode(r); err != nil {
+				return err
+			}
+		}
+		return nil
+	case "csv":
+		keys := []string{"_time", "hostname", "severity_name", "app_name", "message"}
+		fmt.Fprintln(w, strings.Join(keys, ","))
+		for _, r := range res.Data {
+			vals := make([]string, len(keys))
+			for i, k := range keys {
+				vals[i] = strconv.Quote(fmt.Sprint(r[k]))
+			}
+			fmt.Fprintln(w, strings.Join(vals, ","))
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported export format")
+	}
 }
