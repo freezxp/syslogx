@@ -30,8 +30,7 @@ const nav: NavItem[] = [
 export function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
-  const window=useMemo(()=>range('15m'),[])
-  const logs = useQuery({queryKey: ['recent-logs'], queryFn: ({signal}) => api.search({...window,limit:1000},signal), refetchInterval: 5_000})
+  const logs = useQuery({queryKey: ['recent-logs'], queryFn: ({signal}) => api.search({...range('15m'),limit:1000},signal), refetchInterval: 5_000})
   const ready = useQuery({queryKey: ['ready'], queryFn: ({signal}) => api.ready(signal), refetchInterval: 5_000})
   const identity = useQuery({queryKey:['identity'],queryFn:({signal})=>api.me(signal),retry:false})
   const rows = logs.data?.data ?? []
@@ -86,9 +85,10 @@ function Dashboard({rows, loading, error, onRefresh, ready}: {rows:LogRow[];load
 
 function LogExplorer() {
   const params=new URLSearchParams(location.search)
-  const [query,setQuery]=useState(params.get('query')??''); const [duration,setDuration]=useState(params.get('range')??'1h'); const [customStart,setCustomStart]=useState('');const[customEnd,setCustomEnd]=useState(''); const [mode,setMode]=useState<'visual'|'advanced'>('visual'); const [filters,setFilters]=useState<QueryFilter[]>([]); const [selected,setSelected]=useState<LogRow|null>(null); const [cursor,setCursor]=useState(''); const [submitted,setSubmitted]=useState(0)
-  const times=useMemo(()=>duration==='custom'&&customStart&&customEnd?{start:new Date(customStart).toISOString(),end:new Date(customEnd).toISOString()}:range(duration),[duration,customStart,customEnd,submitted]); const spec:LogQuery={...times,query:mode==='visual'?query:undefined,native_query:mode==='advanced'?query:undefined,filters,limit:250,cursor}
-  const logs=useQuery({queryKey:['search',spec,submitted],queryFn:({signal})=>api.search(spec,signal)})
+  const [query,setQuery]=useState(params.get('query')??''); const [duration,setDuration]=useState(params.get('range')??'1h'); const [customStart,setCustomStart]=useState('');const[customEnd,setCustomEnd]=useState(''); const [mode,setMode]=useState<'visual'|'advanced'>('visual'); const [filters,setFilters]=useState<QueryFilter[]>([]); const [selected,setSelected]=useState<LogRow|null>(null); const [cursor,setCursor]=useState(''); const [submitted,setSubmitted]=useState(0);const[clock,setClock]=useState(0)
+  useEffect(()=>{const timer=setInterval(()=>setClock(x=>x+1),5000);return()=>clearInterval(timer)},[])
+  const times=useMemo(()=>duration==='custom'&&customStart&&customEnd?{start:new Date(customStart).toISOString(),end:new Date(customEnd).toISOString()}:range(duration),[duration,customStart,customEnd,submitted,clock]); const spec:LogQuery={...times,query:mode==='visual'?query:undefined,native_query:mode==='advanced'?query:undefined,filters,limit:250,cursor}
+  const logs=useQuery({queryKey:['search',spec,submitted],queryFn:({signal})=>api.search(spec,signal),placeholderData:previous=>previous})
   const fields=useQuery({queryKey:['fields',times],queryFn:({signal})=>api.fields({...times,limit:500},signal)})
   const stats=useQuery({queryKey:['explorer-stats',spec,submitted],queryFn:({signal})=>api.stats({...spec,cursor:'',limit:1000},signal)})
   const facetGroups:{field:string;items:ValueCount[]}[]=[{field:'severity_name',items:stats.data?.severities??[]},{field:'hostname',items:stats.data?.top_hosts??[]}]

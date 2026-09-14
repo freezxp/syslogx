@@ -400,6 +400,11 @@ func (w *statusWriter) Write(p []byte) (int, error) {
 	return w.ResponseWriter.Write(p)
 }
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
 
 func requestLog(logger *slog.Logger, observer HTTPObserver, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
