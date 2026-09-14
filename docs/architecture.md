@@ -1,6 +1,6 @@
 # Architecture
 
-Status: proposed for Phase 0 review  
+Status: accepted for Phase 1 implementation
 Decision baseline: VictoriaLogs first, PostgreSQL control plane, modular monolith
 
 ## Executive decision

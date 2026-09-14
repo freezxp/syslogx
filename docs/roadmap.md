@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: proposed; implementation is blocked on Phase 0 review approval
+Status: Phase 1 implementation active; Phase 0 review approved 2026-09-14
 
 ## Delivery rules
 
@@ -36,7 +36,7 @@ After approval, add `README.md`, engineering setup, exact dependency versions, `
 - PostgreSQL migrations/repository skeleton and VictoriaLogs client health/capabilities.
 - Compose profile with pinned VictoriaLogs/PostgreSQL images and non-root runtime.
 
-Requirements: ING-005, reliability/operability baseline.  
+Requirements: ING-005, reliability/operability baseline.
 Commits: `chore: initialize backend toolchain`, `feat: add configuration and service lifecycle`, `ops: add compose development stack`.
 
 ### 1.2 Domain model and parser core
@@ -45,7 +45,7 @@ Commits: `chore: initialize backend toolchain`, `feat: add configuration and ser
 - RFC 3164 and RFC 5424 parsers with golden/property/fuzz tests.
 - VictoriaLogs mapping contract fixtures.
 
-Requirements: ING-001, ING-004, ING-005.  
+Requirements: ING-001, ING-004, ING-005.
 Commits: `feat: add normalized log model`, `feat: add RFC3164 parser`, `feat: add RFC5424 parser`.
 
 ### 1.3 Reliable bounded pipeline
@@ -54,7 +54,7 @@ Commits: `feat: add normalized log model`, `feat: add RFC3164 parser`, `feat: ad
 - Counters/histograms and failure accounting; fault tests.
 - VictoriaLogs appender using streaming/batched HTTP with deadlines.
 
-Requirements: ING-006, ING-008.  
+Requirements: ING-006, ING-008.
 Commits: `feat: add bounded ingestion pipeline`, `feat: add VictoriaLogs storage adapter`, `test: add storage outage and shutdown coverage`.
 
 ### 1.4 Syslog listeners and core acceptance
@@ -63,7 +63,7 @@ Commits: `feat: add bounded ingestion pipeline`, `feat: add VictoriaLogs storage
 - End-to-end search verification through a minimal internal/admin endpoint or storage contract—not the full UI claim.
 - Compose smoke script sends `logger` event and verifies it in VictoriaLogs through Syslogx contract.
 
-Requirements: ING-001, ING-007.  
+Requirements: ING-001, ING-007.
 Gate: 10K events/s reference run, no application-level drops under nominal profile, all counts reconciled. No 100K claim.
 
 ## Phase 2 — HTTP JSON and identity

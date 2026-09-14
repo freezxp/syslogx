@@ -1,6 +1,6 @@
 # Syslogx requirements
 
-Status: Phase 0 baseline  
+Status: Phase 0 baseline
 Last reviewed: 2026-09-14
 
 ## Purpose

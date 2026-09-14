@@ -1,6 +1,6 @@
 # ADR 0006: Server-Sent Events for browser live tail
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-14
 
 ## Context

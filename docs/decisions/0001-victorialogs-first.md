@@ -1,6 +1,6 @@
 # ADR 0001: VictoriaLogs is the initial log backend
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-14
 
 ## Context

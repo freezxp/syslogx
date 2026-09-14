@@ -1,6 +1,6 @@
 # ADR 0003: Portable query AST with explicit native dialects
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-14
 
 ## Context

@@ -1,6 +1,6 @@
 # Storage backend comparison
 
-Status: accepted recommendation for initial implementation  
+Status: accepted recommendation for initial implementation
 Scope: VictoriaLogs versus self-managed ClickHouse for the Syslogx log data plane
 
 ## Recommendation

@@ -1,6 +1,6 @@
 # ADR 0005: Bounded at-least-accounted ingestion, not implied durability
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-14
 
 ## Context

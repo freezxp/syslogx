@@ -1,6 +1,6 @@
 # ADR 0004: Begin as a modular monolith
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-14
 
 ## Context
