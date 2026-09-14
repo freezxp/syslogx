@@ -14,7 +14,7 @@ docker compose ps
 curl http://127.0.0.1:8080/ready
 ```
 
-Open the web console at [http://127.0.0.1:8080](http://127.0.0.1:8080).
+Open the web console at [http://192.168.0.55:8080](http://192.168.0.55:8080). The Compose frontend binding uses this host's LAN address so a reverse proxy on the LAN can reach it; update the binding if the host address changes.
 
 Send a message:
 
