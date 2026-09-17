@@ -99,10 +99,13 @@ func run() error {
 	}
 
 	var controlChecker api.ControlChecker
+	var savedSearches api.Options
 	if controlStore != nil {
 		controlChecker = controlStore
+		savedSearches.SavedSearches = controlStore
 	}
-	server := api.New(cfg.Server.HTTP, backend, controlChecker, cfg.ControlStore.Timeout, accepting, httpMetrics, logger)
+	savedSearches.Sources = cfg.Ingestion.Sources
+	server := api.New(cfg.Server.HTTP, backend, controlChecker, cfg.ControlStore.Timeout, accepting, httpMetrics, logger, savedSearches)
 	serverErrors := make(chan error, 1)
 	go func() {
 		logger.Info("http server started", "address", cfg.Server.HTTP.Address, "version", version)

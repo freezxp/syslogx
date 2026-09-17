@@ -6,6 +6,7 @@ export type ValueCount = { value:string; count:number }
 export type Stats = { total:number; volume:{timestamp:string;count:number}[]; severities:ValueCount[]; top_hosts:ValueCount[]; top_applications:ValueCount[] }
 export type ReadyResponse = { status:'ready'|'not_ready'; checks:Record<string,unknown> }
 export type SavedSearch = { id:string; name:string; description:string; query:string; default_time_range:string; created_by:string; created_at:string; updated_at:string }
+export type Source = { id:string; name:string; protocol:string; address:string; parser:string; enabled:boolean; status:string }
 
 async function request<T>(path:string, init:RequestInit={}):Promise<T> {
   const response=await fetch(path,{credentials:'same-origin',...init,headers:{Accept:'application/json',...(init.body?{'Content-Type':'application/json'}:{}),...init.headers}})
@@ -25,7 +26,8 @@ export const api={
   ready:async(signal?:AbortSignal)=>{const response=await fetch('/ready',{signal});if(response.status!==200&&response.status!==503)throw new Error(response.statusText);return response.json() as Promise<ReadyResponse>},
   saved:(signal?:AbortSignal)=>request<{data:SavedSearch[]}>('/api/v1/saved-searches',{signal}),
   save:(v:Pick<SavedSearch,'name'|'description'|'query'|'default_time_range'>)=>post<SavedSearch>('/api/v1/saved-searches',v),
-  removeSaved:(id:string)=>request<void>(`/api/v1/saved-searches/${id}`,{method:'DELETE'})
+  removeSaved:(id:string)=>request<void>(`/api/v1/saved-searches/${id}`,{method:'DELETE'}),
+  sources:(signal?:AbortSignal)=>request<{data:Source[]}>('/api/v1/sources',{signal})
 }
 export const value=(row:LogRow,key:string)=>{const raw=row[key];if(raw===null||raw===undefined)return'—';return typeof raw==='object'?JSON.stringify(raw):String(raw)}
 export function range(duration:string){const end=new Date();const units:Record<string,number>={m:60000,h:3600000,d:86400000};const match=duration.match(/^(\d+)([mhd])$/);const ms=match?Number(match[1])*units[match[2]]:3600000;return{start:new Date(end.getTime()-ms).toISOString(),end:end.toISOString()}}

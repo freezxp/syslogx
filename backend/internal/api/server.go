@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/freezxp/syslogx/backend/internal/config"
+	"github.com/freezxp/syslogx/backend/internal/controlstore"
 	"github.com/freezxp/syslogx/backend/internal/domain"
 	"github.com/freezxp/syslogx/backend/internal/storage"
 	"github.com/freezxp/syslogx/backend/internal/storage/victorialogs"
@@ -40,10 +41,21 @@ type Server struct {
 	auth           *authManager
 	savedMu        sync.RWMutex
 	saved          map[string]savedSearch
+	savedStore     controlstore.SavedSearchStore
+	sources        []config.SourceConfig
 }
 
-func New(cfg config.HTTPConfig, backend storage.Backend, control ControlChecker, controlTimeout time.Duration, accepting *atomic.Bool, observer HTTPObserver, logger *slog.Logger) *Server {
+type Options struct {
+	SavedSearches controlstore.SavedSearchStore
+	Sources       []config.SourceConfig
+}
+
+func New(cfg config.HTTPConfig, backend storage.Backend, control ControlChecker, controlTimeout time.Duration, accepting *atomic.Bool, observer HTTPObserver, logger *slog.Logger, options ...Options) *Server {
 	s := &Server{backend: backend, control: control, controlTimeout: controlTimeout, accepting: accepting, logger: logger, auth: newAuthManager(), saved: map[string]savedSearch{}}
+	if len(options) > 0 {
+		s.savedStore = options[0].SavedSearches
+		s.sources = append([]config.SourceConfig(nil), options[0].Sources...)
+	}
 	if q, ok := backend.(storage.Querier); ok {
 		s.query = q
 	}
@@ -69,6 +81,7 @@ func New(cfg config.HTTPConfig, backend storage.Backend, control ControlChecker,
 	mux.HandleFunc("GET /api/v1/saved-searches", s.listSaved)
 	mux.HandleFunc("POST /api/v1/saved-searches", s.createSaved)
 	mux.HandleFunc("DELETE /api/v1/saved-searches/{id}", s.deleteSaved)
+	mux.HandleFunc("GET /api/v1/sources", s.listSources)
 	s.http = &http.Server{Addr: cfg.Address, Handler: requestLog(logger, observer, s.authMiddleware(mux)), ReadTimeout: cfg.ReadTimeout, WriteTimeout: cfg.WriteTimeout, IdleTimeout: cfg.IdleTimeout, ReadHeaderTimeout: cfg.ReadHeaderTimeout}
 	return s
 }

@@ -45,6 +45,16 @@ paths:
   /api/v1/saved-searches:
     get: {responses: {'200': {description: Saved searches}}}
     post: {responses: {'201': {description: Saved search created}, '400': {description: Invalid input}}}
+  /api/v1/saved-searches/{id}:
+    delete:
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'204': {description: Saved search deleted}, '404': {description: Search not found or not owned by caller}}
+  /api/v1/sources:
+    get:
+      operationId: listSources
+      description: Read-only configured listener list. Runtime source CRUD is not implemented.
+      responses:
+        '200': {description: Configured listeners, content: {application/json: {schema: {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/Source'}}}}}}}
   /health:
     get:
       operationId: getHealth
@@ -91,6 +101,16 @@ components:
   requestBodies:
     Query: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/LogQuery'}}}}
   schemas:
+    Source:
+      type: object
+      required: [id, name, protocol, address, parser, enabled, status]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        protocol: {type: string}
+        address: {type: string}
+        parser: {type: string}
+        enabled: {type: boolean}
     Login:
       type: object
       required: [username, password]

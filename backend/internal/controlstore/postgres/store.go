@@ -37,6 +37,18 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   applied_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS saved_searches (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  query text NOT NULL DEFAULT '',
+  default_time_range text NOT NULL DEFAULT '1h',
+  created_by text NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS saved_searches_owner_name_idx ON saved_searches(created_by, name);
+INSERT INTO schema_migrations(version) VALUES (2) ON CONFLICT DO NOTHING;
 `)
 	if err != nil {
 		return fmt.Errorf("migrate postgres: %w", err)
