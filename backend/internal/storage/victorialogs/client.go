@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -182,90 +181,133 @@ func (c *Client) runQuery(ctx context.Context, logsQL string) ([]map[string]any,
 }
 
 func (c *Client) Stats(ctx context.Context, q storage.Query) (storage.StatsResult, error) {
-	copyQ := q
-	copyQ.Limit = 1000
-	copyQ.Cursor = ""
-	res, err := c.Query(ctx, copyQ)
+	q.Cursor = ""
+	base, err := querybuilder.LogsQL(q)
 	if err != nil {
 		return storage.StatsResult{}, err
 	}
-	out := storage.StatsResult{Total: int64(len(res.Data))}
-	sev := map[string]int64{}
-	hosts := map[string]int64{}
-	apps := map[string]int64{}
-	buckets := map[time.Time]int64{}
-	for _, r := range res.Data {
-		count(sev, r["severity_name"])
-		count(hosts, r["hostname"])
-		count(apps, r["app_name"])
-		if raw, ok := r["_time"].(string); ok {
-			if t, e := time.Parse(time.RFC3339Nano, raw); e == nil {
-				t = t.Truncate(time.Minute)
-				buckets[t]++
-			}
+	totalRows, err := c.runQuery(ctx, base+" | stats count() as total")
+	if err != nil {
+		return storage.StatsResult{}, err
+	}
+	out := storage.StatsResult{}
+	if len(totalRows) > 0 {
+		out.Total, err = number(totalRows[0]["total"])
+		if err != nil {
+			return storage.StatsResult{}, err
 		}
 	}
-	out.Severities = sortedCounts(sev, 20)
-	out.TopHosts = sortedCounts(hosts, 10)
-	out.TopApplications = sortedCounts(apps, 10)
-	for t, n := range buckets {
-		out.Volume = append(out.Volume, storage.Bucket{Timestamp: t, Count: n})
+	step := "1m"
+	span := q.End.Sub(q.Start)
+	switch {
+	case span > 7*24*time.Hour:
+		step = "6h"
+	case span > 2*24*time.Hour:
+		step = "1h"
+	case span > 6*time.Hour:
+		step = "5m"
 	}
-	sort.Slice(out.Volume, func(i, j int) bool { return out.Volume[i].Timestamp.Before(out.Volume[j].Timestamp) })
-	return out, nil
+	volumeRows, err := c.runQuery(ctx, base+" | stats by (_time:"+step+") count() as hits | sort by (_time) asc | limit 500")
+	if err != nil {
+		return storage.StatsResult{}, err
+	}
+	for _, row := range volumeRows {
+		t, err := time.Parse(time.RFC3339Nano, fmt.Sprint(row["_time"]))
+		if err != nil {
+			return storage.StatsResult{}, fmt.Errorf("invalid time bucket: %w", err)
+		}
+		hits, err := number(row["hits"])
+		if err != nil {
+			return storage.StatsResult{}, err
+		}
+		out.Volume = append(out.Volume, storage.Bucket{Timestamp: t, Count: hits})
+	}
+	out.Severities, err = c.groupedCounts(ctx, base, "severity_name", 20)
+	if err != nil {
+		return storage.StatsResult{}, err
+	}
+	out.TopHosts, err = c.groupedCounts(ctx, base, "hostname", 10)
+	if err != nil {
+		return storage.StatsResult{}, err
+	}
+	out.TopApplications, err = c.groupedCounts(ctx, base, "app_name", 10)
+	return out, err
 }
-func count(m map[string]int64, v any) {
-	s := fmt.Sprint(v)
-	if s != "" && s != "<nil>" {
-		m[s]++
-	}
-}
-func sortedCounts(m map[string]int64, limit int) []storage.ValueCount {
-	a := make([]storage.ValueCount, 0, len(m))
-	for k, v := range m {
-		a = append(a, storage.ValueCount{Value: k, Count: v})
-	}
-	sort.Slice(a, func(i, j int) bool { return a[i].Count > a[j].Count })
-	if len(a) > limit {
-		a = a[:limit]
-	}
-	return a
-}
-func (c *Client) FieldNames(ctx context.Context, q storage.Query) ([]storage.FieldInfo, error) {
-	copyQ := q
-	copyQ.Limit = 500
-	res, err := c.Query(ctx, copyQ)
+
+func (c *Client) groupedCounts(ctx context.Context, base, field string, limit int) ([]storage.ValueCount, error) {
+	rows, err := c.runQuery(ctx, base+" | stats by ("+field+") count() as hits | sort by (hits) desc | limit "+strconv.Itoa(limit))
 	if err != nil {
 		return nil, err
 	}
-	m := map[string]int64{}
-	for _, r := range res.Data {
-		for k := range r {
-			m[k]++
+	out := make([]storage.ValueCount, 0, len(rows))
+	for _, row := range rows {
+		value := fmt.Sprint(row[field])
+		if value == "" || value == "<nil>" {
+			continue
 		}
+		hits, err := number(row["hits"])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, storage.ValueCount{Value: value, Count: hits})
 	}
-	out := make([]storage.FieldInfo, 0, len(m))
-	for k, n := range m {
-		out = append(out, storage.FieldInfo{Name: k, Count: n})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
 	return out, nil
 }
+
+func number(v any) (int64, error) {
+	n, err := strconv.ParseInt(fmt.Sprint(v), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid VictoriaLogs aggregate %q: %w", v, err)
+	}
+	return n, nil
+}
+
+func (c *Client) FieldNames(ctx context.Context, q storage.Query) ([]storage.FieldInfo, error) {
+	q.Cursor = ""
+	base, err := querybuilder.LogsQL(q)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := c.runQuery(ctx, base+" | field_names | sort by (hits) desc | limit 500")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]storage.FieldInfo, 0, len(rows))
+	for _, row := range rows {
+		hits, err := number(row["hits"])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, storage.FieldInfo{Name: fmt.Sprint(row["name"]), Count: hits})
+	}
+	return out, nil
+}
+
 func (c *Client) FieldValues(ctx context.Context, q storage.Query, field string, limit int) ([]storage.ValueCount, error) {
 	if limit < 1 || limit > 100 {
 		return nil, fmt.Errorf("limit must be between 1 and 100")
 	}
-	copyQ := q
-	copyQ.Limit = 1000
-	res, err := c.Query(ctx, copyQ)
+	if !querybuilder.ValidField(field) {
+		return nil, fmt.Errorf("invalid field name")
+	}
+	q.Cursor = ""
+	base, err := querybuilder.LogsQL(q)
 	if err != nil {
 		return nil, err
 	}
-	m := map[string]int64{}
-	for _, r := range res.Data {
-		count(m, r[field])
+	rows, err := c.runQuery(ctx, base+" | field_values "+field+" | sort by (hits) desc | limit "+strconv.Itoa(limit))
+	if err != nil {
+		return nil, err
 	}
-	return sortedCounts(m, limit), nil
+	out := make([]storage.ValueCount, 0, len(rows))
+	for _, row := range rows {
+		hits, err := number(row["hits"])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, storage.ValueCount{Value: fmt.Sprint(row[field]), Count: hits})
+	}
+	return out, nil
 }
 func (c *Client) Export(ctx context.Context, q storage.Query, format string, w io.Writer) error {
 	q.Limit = 1000

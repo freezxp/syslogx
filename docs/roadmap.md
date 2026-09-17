@@ -91,7 +91,7 @@ Benchmark and threat/reliability review determines whether a local disk spool is
 
 ## Phase 3 — Query and analytics API
 
-Status: partial. Portable queries, VictoriaLogs compilation, basic pagination/discovery/statistics/export, and SSE tail work. Statistics and discovery currently sample at most 1,000 rows, export is bounded and buffered, and cursors are not signed. Aggregate pushdown, query quotas, and permission-controlled native queries remain open.
+Status: partial. Portable queries, VictoriaLogs compilation, basic pagination/export, native backend-side statistics and field discovery, and SSE tail work. Export remains bounded and buffered; cursors are not signed. Query quotas, permission-controlled native queries, and streaming export remain open.
 
 ### 3.1 Portable query service
 

@@ -29,7 +29,7 @@ func Validate(q *storage.Query) error {
 		return errors.New("query is too large")
 	}
 	for _, f := range q.Filters {
-		if !validField(f.Field) || !allowedOps[f.Op] {
+		if !ValidField(f.Field) || !allowedOps[f.Op] {
 			return errors.New("invalid filter")
 		}
 	}
@@ -73,7 +73,7 @@ func LogsQL(q storage.Query) (string, error) {
 }
 func Cursor(t string) string { return base64.RawURLEncoding.EncodeToString([]byte(t)) }
 func quote(v string) string  { return strconv.Quote(strings.ReplaceAll(v, "\x00", "")) }
-func validField(v string) bool {
+func ValidField(v string) bool {
 	if v == "" || len(v) > 128 {
 		return false
 	}
