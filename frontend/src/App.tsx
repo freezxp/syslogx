@@ -5,7 +5,7 @@ import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   Activity, Boxes, ChevronRight, CircleGauge, Database, FileSearch, Filter, Gauge,
-  HardDrive, LayoutDashboard, Menu, Radio, RefreshCw, Search, Server, Settings,
+  HardDrive, LayoutDashboard, Menu, Radio, RefreshCw, Search, Server,
   ShieldCheck, TerminalSquare, X
 } from 'lucide-react'
 import { api, range, type Filter as QueryFilter, type LogQuery, type LogRow, type ValueCount, value } from './api'
@@ -45,11 +45,12 @@ export function App() {
         : <button key={item.label} className={page === item.page ? 'nav-item active' : 'nav-item'} onClick={() => navigate(item.page!)}>
             <item.icon size={17}/><span>{item.label}</span>{item.soon && <small>SOON</small>}
           </button>)}</nav>
-      <div className="sidebar-bottom"><div className={ready.data?.status === 'ready' ? 'health-dot good' : 'health-dot'}/><div><strong>{ready.data?.status === 'ready' ? 'All systems operational' : 'System needs attention'}</strong><span>Phase 4 · VictoriaLogs</span></div></div>
+      <div className="sidebar-bottom"><div className={ready.data?.status === 'ready' && identity.data?.auth_enabled ? 'health-dot good' : 'health-dot'}/><div><strong>{!identity.data?.auth_enabled ? 'Authentication disabled' : ready.data?.status === 'ready' ? 'Ingestion ready' : 'System needs attention'}</strong><span>VictoriaLogs · evaluation build</span></div></div>
     </aside>
     {menuOpen && <button className="scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)}/>} 
     <main>
-      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)}><Menu size={19}/></button><div className="crumb"><span>Syslogx</span><ChevronRight size={14}/><strong>{pageTitle(page)}</strong></div><div className="top-actions"><div className="phase-pill"><span/> PHASE 4</div><button className="icon-button" aria-label="Settings"><Settings size={18}/></button><div className="avatar">SX</div></div></header>
+      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)}><Menu size={19}/></button><div className="crumb"><span>Syslogx</span><ChevronRight size={14}/><strong>{pageTitle(page)}</strong></div><div className="top-actions"><div className="phase-pill"><span/> EVALUATION</div><div className="avatar">SX</div></div></header>
+      {identity.data?.auth_enabled === false && <div className="page"><Notice>Authentication is disabled. Anyone who can reach this server can access its API. Set an admin password before exposing it publicly.</Notice></div>}
       {page === 'dashboard' && <Dashboard rows={rows} loading={logs.isLoading} error={logs.error} onRefresh={() => logs.refetch()} ready={ready.data}/>} 
       {page === 'logs' && <LogExplorer/>}
       {page === 'live' && <LiveTail/>}
@@ -66,13 +67,13 @@ function pageTitle(page: Page) { return ({dashboard:'Dashboard',logs:'Log explor
 
 function Dashboard({rows, loading, error, onRefresh, ready}: {rows:LogRow[];loading:boolean;error:Error|null;onRefresh:()=>void;ready?:{status:string}}) {
   const stats = useMemo(() => deriveStats(rows), [rows])
-  return <div className="page"><PageHeader eyebrow="OVERVIEW" title="System dashboard" description="A live operational view of your bounded 15-minute log window." action={<button className="secondary-button" onClick={onRefresh}><RefreshCw size={15}/> Refresh</button>}/>
+  return <div className="page"><PageHeader eyebrow="OVERVIEW" title="System dashboard" description="A sample of up to 1,000 logs from the last 15 minutes; values are not total ingestion counts." action={<button className="secondary-button" onClick={onRefresh}><RefreshCw size={15}/> Refresh</button>}/>
     {error && <Notice>VictoriaLogs is unavailable. The UI is running and will reconnect automatically.</Notice>}
     <div className="metric-grid">
-      <Metric icon={Database} label="Recent logs" value={loading?'—':formatNumber(rows.length)} detail="Last 15 minutes" tone="violet"/>
-      <Metric icon={Gauge} label="Window rate" value={`${stats.rate.toFixed(1)}/s`} detail="Observed result window" tone="cyan"/>
-      <Metric icon={ShieldCheck} label="Errors" value={formatNumber(stats.errors)} detail={`${stats.errorPercent.toFixed(1)}% of results`} tone="red"/>
-      <Metric icon={Server} label="Active sources" value={String(stats.sources)} detail="Unique source IDs" tone="amber"/>
+      <Metric icon={Database} label="Sampled logs" value={loading?'—':formatNumber(rows.length)} detail="Up to 1,000 · last 15 minutes" tone="violet"/>
+      <Metric icon={Gauge} label="Sample rate" value={`${stats.rate.toFixed(1)}/s`} detail="Not full ingestion rate" tone="cyan"/>
+      <Metric icon={ShieldCheck} label="Sampled errors" value={formatNumber(stats.errors)} detail={`${stats.errorPercent.toFixed(1)}% of sample`} tone="red"/>
+      <Metric icon={Server} label="Sampled sources" value={String(stats.sources)} detail="Unique IDs in sample" tone="amber"/>
     </div>
     <div className="dashboard-grid">
       <section className="panel chart-panel"><PanelTitle title="Log volume" subtitle="Events per minute"/><div className="chart-wrap"><Suspense fallback={<div className="loading">Loading chart…</div>}><VolumeChart data={stats.volume}/></Suspense></div></section>
