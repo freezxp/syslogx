@@ -14,6 +14,16 @@ const VolumeChart = lazy(() => import("./VolumeChart"))
 
 type Page = 'dashboard' | 'logs' | 'live' | 'sources' | 'searches' | 'system'
 
+const pagePaths: Record<Page,string> = {dashboard:'/',logs:'/logs',live:'/logs/live',sources:'/sources',searches:'/searches',system:'/settings/system'}
+export function pageFromPath(path:string):Page {
+  if(path==='/logs/live')return'live'
+  if(path==='/logs')return'logs'
+  if(path==='/sources'||path.startsWith('/sources/'))return'sources'
+  if(path==='/searches'||path.startsWith('/searches/'))return'searches'
+  if(path==='/settings/system'||path==='/system')return'system'
+  return'dashboard'
+}
+
 type NavItem = {section: string} | {label: string; page: Page; icon: LucideIcon; soon?: boolean}
 
 const nav: NavItem[] = [
@@ -28,13 +38,15 @@ const nav: NavItem[] = [
 ]
 
 export function App() {
-  const [page, setPage] = useState<Page>('dashboard')
+  const [page, setPage] = useState<Page>(()=>pageFromPath(location.pathname))
+  const [routeKey,setRouteKey] = useState(0)
+  useEffect(()=>{const onPop=()=>{setPage(pageFromPath(location.pathname));setRouteKey(k=>k+1)};window.addEventListener('popstate',onPop);return()=>window.removeEventListener('popstate',onPop)},[])
   const [menuOpen, setMenuOpen] = useState(false)
   const logs = useQuery({queryKey: ['recent-logs'], queryFn: ({signal}) => api.search({...range('15m'),limit:1000},signal), refetchInterval: 5_000})
   const ready = useQuery({queryKey: ['ready'], queryFn: ({signal}) => api.ready(signal), refetchInterval: 5_000})
   const identity = useQuery({queryKey:['identity'],queryFn:({signal})=>api.me(signal),retry:false})
   const rows = logs.data?.data ?? []
-  const navigate = (next: Page) => { setPage(next); setMenuOpen(false) }
+  const navigate = (next: Page, href=pagePaths[next]) => { history.pushState(null,'',href);setPage(next);setRouteKey(k=>k+1);setMenuOpen(false) }
 
   if(identity.isError)return <Login onSuccess={()=>identity.refetch()}/>
   return <div className="app-shell">
@@ -52,10 +64,10 @@ export function App() {
       <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)}><Menu size={19}/></button><div className="crumb"><span>Syslogx</span><ChevronRight size={14}/><strong>{pageTitle(page)}</strong></div><div className="top-actions"><div className="phase-pill"><span/> EVALUATION</div><div className="avatar">SX</div></div></header>
       {identity.data?.auth_enabled === false && <div className="page"><Notice>Authentication is disabled. Anyone who can reach this server can access its API. Set an admin password before exposing it publicly.</Notice></div>}
       {page === 'dashboard' && <Dashboard rows={rows} loading={logs.isLoading} error={logs.error} onRefresh={() => logs.refetch()} ready={ready.data}/>} 
-      {page === 'logs' && <LogExplorer/>}
+      {page === 'logs' && <LogExplorer key={routeKey}/>}
       {page === 'live' && <LiveTail/>}
       {page === 'sources' && <Sources/>}
-      {page === 'searches' && <SavedSearches onOpen={(q)=>{history.replaceState(null,'',`/logs?query=${encodeURIComponent(q)}`);navigate('logs')}}/>}
+      {page === 'searches' && <SavedSearches onOpen={(q)=>navigate('logs',`/logs?query=${encodeURIComponent(q)}`)}/>}
       {page === 'system' && <SystemView ready={ready.data}/>} 
     </main>
   </div>
