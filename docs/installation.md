@@ -7,7 +7,7 @@ Install Docker Engine with the Compose plugin. Ensure host TCP/UDP port 514 and 
 ```bash
 docker compose up -d --build
 docker compose ps
-curl http://127.0.0.1:8080/ready
+curl http://192.168.0.55:8080/ready
 ```
 
 The Compose profile binds the API to loopback and maps host syslog 514 to the unprivileged container port 1514. It creates persistent volumes for VictoriaLogs and PostgreSQL. The checked-in PostgreSQL password is a development-only Compose credential; replace it through environment/secret management before any shared deployment.

@@ -25,18 +25,18 @@ logger --server 127.0.0.1 --udp --port 514 "Test syslog message"
 Allow up to the configured one-second batch interval, then open Log Explorer or query the API.
 
 ```bash
-curl 'http://127.0.0.1:8080/api/v1/system/logs/recent?limit=20'
+curl 'http://192.168.0.55:8080/api/v1/system/logs/recent?limit=20'
 ```
 
 HTTP ingestion accepts one object, an array, or NDJSON (up to 1,000 records and 10 MiB per request):
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/ingest \
+curl -X POST http://192.168.0.55:8080/api/v1/ingest \
   -H 'Content-Type: application/json' \
   -d '{"timestamp":"2026-09-14T14:30:00Z","hostname":"server01","level":"error","service":"nginx","message":"connection refused","request_id":"demo-1"}'
 ```
 
-Prometheus metrics are at `http://127.0.0.1:8080/metrics`; process liveness and dependency readiness are `/health` and `/ready`.
+Prometheus metrics are at `http://192.168.0.55:8080/metrics`; process liveness and dependency readiness are `/health` and `/ready`.
 
 ## Configuration
 
