@@ -292,35 +292,75 @@ func (s *Server) tailLogs(w http.ResponseWriter, r *http.Request) {
 	if !s.requireQuery(w) {
 		return
 	}
+	text := r.URL.Query().Get("query")
+	if len(text) > 4096 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "query_too_large"})
+		return
+	}
 	f, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, 501, map[string]any{"code": "streaming_unsupported"})
+		writeJSON(w, http.StatusNotImplemented, map[string]any{"code": "streaming_unsupported"})
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	controller := http.NewResponseController(w)
+	_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	fmt.Fprint(w, ": connected\n\n")
+	f.Flush()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	last := time.Now().Add(-5 * time.Second)
+	seen := make(map[string]struct{}, 4096)
+	order := make([]string, 0, 4096)
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case now := <-ticker.C:
-			q := storage.Query{TenantID: "default", Start: last, End: now, Limit: 200, Text: r.URL.Query().Get("query")}
-			res, e := s.query.Query(r.Context(), q)
-			if e == nil {
-				for i := len(res.Data) - 1; i >= 0; i-- {
-					b, _ := json.Marshal(res.Data[i])
-					fmt.Fprintf(w, "data: %s\n\n", strings.ReplaceAll(string(b), "\n", ""))
+			_ = controller.SetWriteDeadline(now.Add(5 * time.Second))
+			q := storage.Query{TenantID: "default", Start: now.Add(-30 * time.Second), End: now, Limit: 1000, Text: text}
+			res, err := s.query.Query(r.Context(), q)
+			if err != nil {
+				s.logger.Warn("live tail query failed", "error", err)
+				fmt.Fprint(w, "event: warning\ndata: {\"code\":\"query_failed\"}\n\n")
+			} else {
+				if res.Truncated {
+					fmt.Fprint(w, "event: gap\ndata: {\"code\":\"tail_window_truncated\"}\n\n")
 				}
-				f.Flush()
+				for i := len(res.Data) - 1; i >= 0; i-- {
+					row := res.Data[i]
+					key := tailKey(row)
+					if _, exists := seen[key]; exists {
+						continue
+					}
+					seen[key] = struct{}{}
+					order = append(order, key)
+					if len(order) > 4096 {
+						delete(seen, order[0])
+						order = order[1:]
+					}
+					b, err := json.Marshal(row)
+					if err != nil {
+						continue
+					}
+					if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+						return
+					}
+				}
 			}
-			last = now
+			fmt.Fprint(w, ": heartbeat\n\n")
+			f.Flush()
 		}
 	}
 }
 
+func tailKey(row map[string]any) string {
+	if id, ok := row["id"].(string); ok && id != "" {
+		return id
+	}
+	return fmt.Sprint(row["_stream_id"]) + "|" + fmt.Sprint(row["_time"]) + "|" + fmt.Sprint(row["_msg"])
+}
 func (s *Server) ListenAndServe() error              { return s.http.ListenAndServe() }
 func (s *Server) Shutdown(ctx context.Context) error { return s.http.Shutdown(ctx) }
 

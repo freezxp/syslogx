@@ -311,11 +311,15 @@ func (c *Client) FieldValues(ctx context.Context, q storage.Query, field string,
 	}
 	out := make([]storage.ValueCount, 0, len(rows))
 	for _, row := range rows {
+		value, present := row[field]
+		if !present || value == nil || fmt.Sprint(value) == "" {
+			continue
+		}
 		hits, err := number(row["hits"])
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, storage.ValueCount{Value: fmt.Sprint(row[field]), Count: hits})
+		out = append(out, storage.ValueCount{Value: fmt.Sprint(value), Count: hits})
 	}
 	return out, nil
 }

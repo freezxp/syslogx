@@ -37,6 +37,7 @@ func TestNativeAggregates(t *testing.T) {
 		case strings.Contains(q, "field_names"):
 			fmt.Fprintln(w, "{\"name\":\"hostname\",\"hits\":\"5000\"}")
 		case strings.Contains(q, "field_values hostname"):
+			fmt.Fprintln(w, "{\"hits\":\"4999\"}")
 			fmt.Fprintln(w, "{\"hostname\":\"fw01\",\"hits\":\"5000\"}")
 		default:
 			t.Errorf("unexpected query: %s", q)
