@@ -36,7 +36,7 @@ curl -X POST http://192.168.0.55:8080/api/v1/ingest \
   -d '{"timestamp":"2026-09-14T14:30:00Z","hostname":"server01","level":"error","service":"nginx","message":"connection refused","request_id":"demo-1"}'
 ```
 
-Prometheus metrics are at `http://192.168.0.55:8080/metrics`; process liveness and dependency readiness are `/health` and `/ready`.
+Prometheus metrics are at `http://127.0.0.1:18080/metrics` on the Docker host. The metrics/admin port is bound to loopback only; the public web route `/metrics` is not a metrics endpoint. Process liveness and dependency readiness are `/health` and `/ready` on the web address.
 
 ## Configuration
 

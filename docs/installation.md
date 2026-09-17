@@ -10,7 +10,7 @@ docker compose ps
 curl http://192.168.0.55:8080/ready
 ```
 
-The Compose profile binds the web frontend to host LAN address `192.168.0.55:8080` and maps host syslog 514 to the unprivileged container port 1514. It creates persistent volumes for VictoriaLogs and PostgreSQL. Change the LAN binding if this host's address changes. Authentication is disabled unless `SYSLOGX_ADMIN_PASSWORD` is set, and the checked-in PostgreSQL password is development-only. Do not expose this profile publicly or use it for sensitive logs without completing security hardening.
+The Compose profile binds the web frontend to host LAN address `192.168.0.55:8080`, the backend metrics endpoint to host loopback `127.0.0.1:18080`, and maps host syslog 514 to the unprivileged container port 1514. It creates persistent volumes for VictoriaLogs and PostgreSQL. Change the LAN binding if this host's address changes. Authentication is disabled unless `SYSLOGX_ADMIN_PASSWORD` is set, and the checked-in PostgreSQL password is development-only. Do not expose this profile publicly or use it for sensitive logs without completing security hardening.
 
 Send and verify a test event as described in the [README](../README.md). `docker compose down` stops services without deleting volumes. Do not use `down -v` unless permanent data removal is intended.
 

@@ -36,6 +36,7 @@ services:
     ports:
       - "514:1514/udp"
       - "514:1514/tcp"
+      - "127.0.0.1:18080:8080"
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
