@@ -36,7 +36,7 @@ paths:
     post:
       parameters: [{name: format, in: query, schema: {type: string, enum: [json, csv, ndjson]}}]
       requestBody: {$ref: '#/components/requestBodies/Query'}
-      responses: {'200': {description: Bounded streamed export}, '400': {description: Invalid query}}
+      responses: {'200': {description: Streamed export, capped at 10,000 rows and 100 MiB}, '400': {description: Invalid query}}
   /api/v1/logs/tail:
     get:
       description: Server-Sent Events stream with a bounded server query and client buffer.

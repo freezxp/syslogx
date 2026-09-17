@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -149,7 +150,7 @@ func (c *Client) Query(ctx context.Context, q storage.Query) (storage.QueryResul
 	return result, nil
 }
 
-func (c *Client) runQuery(ctx context.Context, logsQL string) ([]map[string]any, error) {
+func (c *Client) queryStream(ctx context.Context, logsQL string) (io.ReadCloser, error) {
 	u := *c.endpoint
 	u.Path = strings.TrimRight(u.Path, "/") + "/select/logsql/query"
 	form := url.Values{"query": {logsQL}}
@@ -162,13 +163,22 @@ func (c *Client) runQuery(ctx context.Context, logsQL string) ([]map[string]any,
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", storage.ErrUnavailable, err)
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("VictoriaLogs query returned %s: %s", resp.Status, strings.TrimSpace(string(b)))
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("VictoriaLogs query returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
+	return resp.Body, nil
+}
+
+func (c *Client) runQuery(ctx context.Context, logsQL string) ([]map[string]any, error) {
+	body, err := c.queryStream(ctx, logsQL)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
 	rows := []map[string]any{}
-	s := bufio.NewScanner(resp.Body)
+	s := bufio.NewScanner(body)
 	s.Buffer(make([]byte, 64<<10), 4<<20)
 	for s.Scan() {
 		var row map[string]any
@@ -310,34 +320,96 @@ func (c *Client) FieldValues(ctx context.Context, q storage.Query, field string,
 	return out, nil
 }
 func (c *Client) Export(ctx context.Context, q storage.Query, format string, w io.Writer) error {
+	if format != "json" && format != "ndjson" && format != "csv" {
+		return fmt.Errorf("unsupported export format")
+	}
 	q.Limit = 1000
-	res, err := c.Query(ctx, q)
+	base, err := querybuilder.LogsQL(q)
 	if err != nil {
 		return err
 	}
-	switch format {
-	case "json":
-		return json.NewEncoder(w).Encode(res.Data)
-	case "ndjson":
-		e := json.NewEncoder(w)
-		for _, r := range res.Data {
-			if err := e.Encode(r); err != nil {
+	const maxRows = 10000
+	const maxBytes = 100 << 20
+	body, err := c.queryStream(ctx, base+" | sort by (_time) desc | limit "+strconv.Itoa(maxRows))
+	if err != nil {
+		return err
+	}
+	defer body.Close()
+	out := bufio.NewWriterSize(w, 64<<10)
+	var csvOut *csv.Writer
+	if format == "csv" {
+		csvOut = csv.NewWriter(out)
+		if err := csvOut.Write([]string{"_time", "hostname", "severity_name", "app_name", "_msg"}); err != nil {
+			return err
+		}
+	} else if format == "json" {
+		if _, err := out.WriteString("["); err != nil {
+			return err
+		}
+	}
+	s := bufio.NewScanner(body)
+	s.Buffer(make([]byte, 64<<10), 4<<20)
+	rows, bytesRead := 0, 0
+	for rows < maxRows && s.Scan() {
+		line := s.Bytes()
+		bytesRead += len(line)
+		if bytesRead > maxBytes {
+			return fmt.Errorf("export byte limit exceeded")
+		}
+		switch format {
+		case "ndjson":
+			if _, err := out.Write(line); err != nil {
+				return err
+			}
+			if err := out.WriteByte('\n'); err != nil {
+				return err
+			}
+		case "json":
+			if rows > 0 {
+				if err := out.WriteByte(','); err != nil {
+					return err
+				}
+			}
+			if _, err := out.Write(line); err != nil {
+				return err
+			}
+		case "csv":
+			var row map[string]any
+			if err := json.Unmarshal(line, &row); err != nil {
+				return err
+			}
+			values := []string{csvCell(row["_time"]), csvCell(row["hostname"]), csvCell(row["severity_name"]), csvCell(row["app_name"]), csvCell(row["_msg"])}
+			if err := csvOut.Write(values); err != nil {
 				return err
 			}
 		}
-		return nil
-	case "csv":
-		keys := []string{"_time", "hostname", "severity_name", "app_name", "message"}
-		fmt.Fprintln(w, strings.Join(keys, ","))
-		for _, r := range res.Data {
-			vals := make([]string, len(keys))
-			for i, k := range keys {
-				vals[i] = strconv.Quote(fmt.Sprint(r[k]))
-			}
-			fmt.Fprintln(w, strings.Join(vals, ","))
-		}
-		return nil
-	default:
-		return fmt.Errorf("unsupported export format")
+		rows++
 	}
+	if err := s.Err(); err != nil {
+		return err
+	}
+	if format == "json" {
+		if _, err := out.WriteString("]\n"); err != nil {
+			return err
+		}
+	}
+	if csvOut != nil {
+		csvOut.Flush()
+		if err := csvOut.Error(); err != nil {
+			return err
+		}
+	}
+	return out.Flush()
+}
+
+func csvCell(v any) string {
+	if v == nil {
+		return ""
+	}
+	s := fmt.Sprint(v)
+	trimmed := strings.TrimLeft(s, " \t\r\n")
+	if trimmed != "" && strings.ContainsRune("=+-@", rune(trimmed[0])) {
+		return "'" + s
+	}
+	return s
 }
