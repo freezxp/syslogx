@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: Phases 0–4 implemented; Phase 5 is next (2026-09-14)
+Status: Phases 0–4 have a functional baseline; Phase 5 is in progress (2026-09-17). This is not production-ready.
 
 ## Delivery rules
 
@@ -68,7 +68,7 @@ Gate: 10K events/s reference run, no application-level drops under nominal profi
 
 ## Phase 2 — HTTP JSON and identity
 
-Status: complete for the Phase 2 scope. Cookie sessions, bootstrap authentication/RBAC boundary, object/array/NDJSON ingestion, size/count limits, and unknown-field preservation are implemented. Persistent user administration and ingestion API keys remain Phase 5 hardening.
+Status: partial. Object/array/NDJSON ingestion and unknown-field preservation work. Bootstrap cookie authentication is optional and disabled in the current Compose stack. Persistent user administration, scoped ingestion keys, CSRF protection, audit, and robust RBAC are not implemented.
 
 ### 2.1 Authentication/control plane
 
@@ -91,7 +91,7 @@ Benchmark and threat/reliability review determines whether a local disk spool is
 
 ## Phase 3 — Query and analytics API
 
-Status: complete for the Phase 3 scope. Portable queries, safe VictoriaLogs compilation, cursor pagination, discovery, statistics, bounded export, and SSE tail are implemented. Aggregate pushdown and signed cursors are tracked hardening items.
+Status: partial. Portable queries, VictoriaLogs compilation, basic pagination/discovery/statistics/export, and SSE tail work. Statistics and discovery currently sample at most 1,000 rows, export is bounded and buffered, and cursors are not signed. Aggregate pushdown, query quotas, and permission-controlled native queries remain open.
 
 ### 3.1 Portable query service
 
@@ -118,7 +118,7 @@ Requirements: QRY-002, QRY-006, QRY-008.
 
 ## Phase 4 — Web experience
 
-Status: complete. The web console includes the dashboard, visual/native explorer, preset/custom ranges, URL query state, dynamic fields, virtualized table, detail drawer, export, saved searches, and bounded SSE live tail.
+Status: functional UI baseline. The console includes dashboard, explorer, time ranges, dynamic fields, virtualized results, details, export, saved searches, and SSE tail. E2E, accessibility, and permission-flow verification remain open.
 
 ### 4.1 Design system and application shell
 
@@ -140,6 +140,8 @@ Requirements: UI-001–UI-004, QRY-001, QRY-004, QRY-007.
 Requirements: QRY-005, QRY-008, CTL-002.
 
 ## Phase 5 — Operations and MVP gate
+
+Progress: saved searches now use PostgreSQL when the control store is enabled; the Sources page reads configured listeners from the API. Source mutation, actual per-listener health reconciliation, user administration, retention controls, audit, backup/restore, and the MVP acceptance gate remain open.
 
 - Persisted source CRUD and safe supervisor reconciliation; desired/observed status and test action.
 - Users/roles, storage health/capabilities, retention desired/observed, ingestion/parser dashboards, audit viewer.

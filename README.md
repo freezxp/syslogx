@@ -1,6 +1,6 @@
 # Syslogx
 
-Syslogx is a production-oriented syslog ingestion and log analytics platform. Phases 1–4 provide configurable RFC 3164/RFC 5424 ingestion over UDP and TCP, JSON/NDJSON HTTP ingestion, bounded batching, VictoriaLogs storage, authenticated API foundations, search and analytics APIs, exports, saved searches, and a full log exploration UI.
+Syslogx is a developing syslog ingestion and log analytics platform. The current baseline provides configurable RFC 3164/RFC 5424 ingestion over UDP and TCP, JSON/NDJSON HTTP ingestion, bounded batching, VictoriaLogs storage, search and analytics APIs, exports, PostgreSQL-backed saved searches, and a log exploration UI. It is not yet production-ready; see the roadmap for security and reliability gaps.
 
 A dark-first React console provides dashboards, visual and native queries, custom time ranges, dynamic fields, a virtualized result table, detail inspection, saved searches, exports, and bounded live tailing over SSE. Source administration and persisted user management remain Phase 5 work. See [the roadmap](docs/roadmap.md).
 
@@ -48,7 +48,9 @@ The default Compose configuration is [`config/syslogx.yaml`](config/syslogx.yaml
 - `SYSLOGX_CONTROL_STORE_DSN`
 - `SYSLOGX_CONTROL_STORE_DSN_FILE`
 
-Set `SYSLOGX_ADMIN_PASSWORD` to enable cookie-based authentication with the bootstrap `admin` account. When unset, local development runs in explicit authentication-bypass mode. CLI flags override environment and YAML for the HTTP address and storage endpoint. Ingestion uses an in-memory bounded queue and does not claim crash-durable delivery; UDP is best effort.
+Set `SYSLOGX_ADMIN_PASSWORD` to enable cookie-based authentication with the bootstrap `admin` account. When unset, **all API routes are accessible without login**; the supplied Compose stack currently leaves this unset. Do not expose it to the internet or use it for sensitive logs. Even with a password, user management, scoped ingestion credentials, CSRF controls, and robust role enforcement are not complete. CLI flags override environment and YAML for the HTTP address and storage endpoint. Ingestion uses an in-memory bounded queue and does not claim crash-durable delivery; UDP is best effort.
+
+The Sources page reports the configured listeners. Runtime create/edit/disable/delete is not implemented; change `config/syslogx.yaml` and restart the application. Saved searches persist in PostgreSQL when the control store is enabled, but are process-local otherwise.
 
 ## Development
 
