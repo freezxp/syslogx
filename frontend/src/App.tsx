@@ -42,10 +42,8 @@ export function App() {
   const [routeKey,setRouteKey] = useState(0)
   useEffect(()=>{const onPop=()=>{setPage(pageFromPath(location.pathname));setRouteKey(k=>k+1)};window.addEventListener('popstate',onPop);return()=>window.removeEventListener('popstate',onPop)},[])
   const [menuOpen, setMenuOpen] = useState(false)
-  const logs = useQuery({queryKey: ['recent-logs'], queryFn: ({signal}) => api.search({...range('15m'),limit:1000},signal), refetchInterval: 5_000})
   const ready = useQuery({queryKey: ['ready'], queryFn: ({signal}) => api.ready(signal), refetchInterval: 5_000})
   const identity = useQuery({queryKey:['identity'],queryFn:({signal})=>api.me(signal),retry:false})
-  const rows = logs.data?.data ?? []
   const navigate = (next: Page, href=pagePaths[next]) => { history.pushState(null,'',href);setPage(next);setRouteKey(k=>k+1);setMenuOpen(false) }
 
   if(identity.isError)return <Login onSuccess={()=>identity.refetch()}/>
@@ -63,7 +61,7 @@ export function App() {
     <main>
       <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)}><Menu size={19}/></button><div className="crumb"><span>Syslogx</span><ChevronRight size={14}/><strong>{pageTitle(page)}</strong></div><div className="top-actions"><div className="phase-pill"><span/> EVALUATION</div><div className="avatar">SX</div></div></header>
       {identity.data?.auth_enabled === false && <div className="page"><Notice>Authentication is disabled. Anyone who can reach this server can access its API. Set an admin password before exposing it publicly.</Notice></div>}
-      {page === 'dashboard' && <Dashboard rows={rows} loading={logs.isLoading} error={logs.error} onRefresh={() => logs.refetch()} ready={ready.data}/>} 
+      {page === 'dashboard' && <Dashboard ready={ready.data}/>}
       {page === 'logs' && <LogExplorer key={routeKey}/>}
       {page === 'live' && <LiveTail/>}
       {page === 'sources' && <Sources/>}
@@ -77,20 +75,30 @@ function Login({onSuccess}:{onSuccess:()=>void}){const[user,setUser]=useState('a
 
 function pageTitle(page: Page) { return ({dashboard:'Dashboard',logs:'Log explorer',live:'Live tail',sources:'Sources',searches:'Saved searches',system:'System health'})[page] }
 
-function Dashboard({rows, loading, error, onRefresh, ready}: {rows:LogRow[];loading:boolean;error:Error|null;onRefresh:()=>void;ready?:{status:string}}) {
-  const stats = useMemo(() => deriveStats(rows), [rows])
-  return <div className="page"><PageHeader eyebrow="OVERVIEW" title="System dashboard" description="A sample of up to 1,000 logs from the last 15 minutes; values are not total ingestion counts." action={<button className="secondary-button" onClick={onRefresh}><RefreshCw size={15}/> Refresh</button>}/>
-    {error && <Notice>VictoriaLogs is unavailable. The UI is running and will reconnect automatically.</Notice>}
+function Dashboard({ready}: {ready?:{status:string}}) {
+  const [duration,setDuration]=useState('1h')
+  const [tick,setTick]=useState(0)
+  useEffect(()=>{const timer=setInterval(()=>setTick(x=>x+1),15_000);return()=>clearInterval(timer)},[])
+  const times=useMemo(()=>range(duration),[duration,tick])
+  const stats=useQuery({queryKey:['dashboard-stats',times],queryFn:({signal})=>api.stats({...times,limit:100},signal)})
+  const rate=useQuery({queryKey:['dashboard-rate',tick],queryFn:({signal})=>api.stats({...range('1m'),limit:100},signal)})
+  const sources=useQuery({queryKey:['sources'],queryFn:({signal})=>api.sources(signal),refetchInterval:30_000})
+  const total=stats.data?.total??0
+  const errors=stats.data?.severities.filter(s=>['error','critical','alert','emergency'].includes(s.value.toLowerCase())).reduce((sum,s)=>sum+s.count,0)??0
+  const volume=stats.data?.volume.map(v=>({label:new Date(v.timestamp).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),count:v.count}))??[]
+  const percent=(count:number)=>total?count/total*100:0
+  return <div className="page"><PageHeader eyebrow="OVERVIEW" title="System dashboard" description="Storage-backed analytics for the selected time range." action={<div className="dashboard-actions"><select aria-label="Dashboard time range" value={duration} onChange={e=>setDuration(e.target.value)}>{[['15m','Last 15 minutes'],['1h','Last 1 hour'],['6h','Last 6 hours'],['24h','Last 24 hours'],['7d','Last 7 days'],['30d','Last 30 days']].map(([v,label])=><option key={v} value={v}>{label}</option>)}</select><button className="secondary-button" onClick={()=>{stats.refetch();rate.refetch();sources.refetch()}}><RefreshCw size={15}/> Refresh</button></div>}/>
+    {stats.error && <Notice>Analytics are unavailable: {stats.error.message}</Notice>}
     <div className="metric-grid">
-      <Metric icon={Database} label="Sampled logs" value={loading?'—':formatNumber(rows.length)} detail="Up to 1,000 · last 15 minutes" tone="violet"/>
-      <Metric icon={Gauge} label="Sample rate" value={`${stats.rate.toFixed(1)}/s`} detail="Not full ingestion rate" tone="cyan"/>
-      <Metric icon={ShieldCheck} label="Sampled errors" value={formatNumber(stats.errors)} detail={`${stats.errorPercent.toFixed(1)}% of sample`} tone="red"/>
-      <Metric icon={Server} label="Sampled sources" value={String(stats.sources)} detail="Unique IDs in sample" tone="amber"/>
+      <Metric icon={Database} label="Logs in range" value={stats.isLoading?'—':formatNumber(total)} detail="Stored events · selected range" tone="violet"/>
+      <Metric icon={Gauge} label="Recent stored rate" value={rate.isLoading?'—':(rate.data?.total??0)/60<10?((rate.data?.total??0)/60).toFixed(1)+'/s':formatNumber(Math.round((rate.data?.total??0)/60))+'/s'} detail="Last 60 seconds · average" tone="cyan"/>
+      <Metric icon={ShieldCheck} label="Errors in range" value={stats.isLoading?'—':formatNumber(errors)} detail={percent(errors).toFixed(1)+'% of stored events'} tone="red"/>
+      <Metric icon={Server} label="Running listeners" value={sources.isLoading?'—':String(sources.data?.data.filter(s=>s.status==='running').length??0)} detail="Configured ingest endpoints" tone="amber"/>
     </div>
     <div className="dashboard-grid">
-      <section className="panel chart-panel"><PanelTitle title="Log volume" subtitle="Events per minute"/><div className="chart-wrap"><Suspense fallback={<div className="loading">Loading chart…</div>}><VolumeChart data={stats.volume}/></Suspense></div></section>
-      <section className="panel"><PanelTitle title="Severity" subtitle="Distribution in current window"/><div className="severity-list">{stats.severities.map(s=><div className="severity-row" key={s.name}><div><span className={`severity-dot ${severityClass(s.name)}`}/><strong>{s.name}</strong></div><div className="severity-track"><span style={{width:`${s.percent}%`}} className={severityClass(s.name)}/></div><b>{formatNumber(s.count)}</b></div>)}</div></section>
-      <section className="panel sources-panel"><PanelTitle title="Top hosts" subtitle="Most active senders"/><div className="rank-list">{stats.hosts.slice(0,5).map((h,i)=><div key={h.name}><span className="rank">{String(i+1).padStart(2,'0')}</span><div><strong>{h.name}</strong><small>{h.percent.toFixed(1)}% of traffic</small></div><b>{formatNumber(h.count)}</b></div>)}{!stats.hosts.length&&<Empty compact/>}</div></section>
+      <section className="panel chart-panel"><PanelTitle title="Log volume" subtitle="Stored events over selected range"/><div className="chart-wrap"><Suspense fallback={<div className="loading">Loading chart…</div>}><VolumeChart data={volume}/></Suspense></div></section>
+      <section className="panel"><PanelTitle title="Severity" subtitle="Distribution in selected range"/><div className="severity-list">{(stats.data?.severities??[]).map(s=><div className="severity-row" key={s.value}><div><span className={'severity-dot '+severityClass(s.value)}/><strong>{s.value}</strong></div><div className="severity-track"><span style={{width:percent(s.count)+'%'}} className={severityClass(s.value)}/></div><b>{formatNumber(s.count)}</b></div>)}</div></section>
+      <section className="panel sources-panel"><PanelTitle title="Top hosts" subtitle="Most active senders"/><div className="rank-list">{(stats.data?.top_hosts??[]).slice(0,5).map((h,i)=><div key={h.value}><span className="rank">{String(i+1).padStart(2,'0')}</span><div><strong>{h.value}</strong><small>{percent(h.count).toFixed(1)}% of traffic</small></div><b>{formatNumber(h.count)}</b></div>)}{!stats.data?.top_hosts.length&&<Empty compact/>}</div></section>
       <section className="panel status-panel"><PanelTitle title="Platform" subtitle="Dependency readiness"/><div className="status-hero"><div className={ready?.status==='ready'?'status-ring good':'status-ring'}><Activity/></div><div><strong>{ready?.status==='ready'?'Ready to ingest':'Waiting for dependencies'}</strong><span>{ready?.status==='ready'?'Syslog listeners and storage are available.':'The UI will recover automatically when services are ready.'}</span></div></div><div className="status-line"><span>Storage engine</span><b>VictoriaLogs</b></div><div className="status-line"><span>Delivery mode</span><b>Bounded memory</b></div></section>
     </div>
   </div>
@@ -148,7 +156,6 @@ function Metric({icon:Icon,label,value:metricValue,detail,tone}:{icon:typeof Dat
 function Notice({children}:{children:React.ReactNode}){return <div className="notice"><Activity size={16}/><div>{children}</div></div>}
 function Empty({compact=false}:{compact?:boolean}){return <div className={compact?'empty compact':'empty'}><Filter/><strong>No logs in this window</strong><span>Send a syslog event or adjust your filter.</span></div>}
 
-function deriveStats(rows:LogRow[]){const counts=(key:string)=>{const m=new Map<string,number>();rows.forEach(r=>{const v=value(r,key);if(v!=='—')m.set(v,(m.get(v)??0)+1)});return [...m].map(([name,count])=>({name,count,percent:rows.length?count/rows.length*100:0})).sort((a,b)=>b.count-a.count)};const errors=rows.filter(r=>['error','critical','alert','emergency'].includes(value(r,'severity_name').toLowerCase())).length;const minutes=new Map<string,number>();rows.forEach(r=>{const raw=value(r,'_time')!=='—'?value(r,'_time'):value(r,'timestamp');const d=new Date(raw);if(!Number.isNaN(d.valueOf())){d.setSeconds(0,0);const key=d.toISOString();minutes.set(key,(minutes.get(key)??0)+1)}});const volume=[...minutes].sort(([a],[b])=>a.localeCompare(b)).map(([iso,count])=>({label:new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),count}));const sourceSet=new Set(rows.map(r=>value(r,'source_id')).filter(v=>v!=='—'));const times=rows.map(r=>Date.parse(value(r,'_time')!=='—'?value(r,'_time'):value(r,'timestamp'))).filter(Number.isFinite);const seconds=times.length>1?Math.max(1,(Math.max(...times)-Math.min(...times))/1000):1;return {errors,errorPercent:rows.length?errors/rows.length*100:0,sources:sourceSet.size,rate:rows.length/seconds,volume,severities:counts('severity_name'),hosts:counts('hostname')}}
 function severityClass(name:string){const n=name.toLowerCase();if(['error','critical','alert','emergency'].includes(n))return'red';if(n==='warning')return'amber';if(n==='notice')return'violet';if(n==='debug')return'gray';return'cyan'}
 function formatNumber(n:number){return new Intl.NumberFormat('en-US',{notation:n>9999?'compact':'standard',maximumFractionDigits:1}).format(n)}
 function formatTime(raw:string){const d=new Date(raw);return Number.isNaN(d.valueOf())?'—':d.toLocaleTimeString([],{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3})}

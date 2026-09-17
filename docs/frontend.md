@@ -76,6 +76,8 @@ An SSE client feeds a bounded browser ring buffer. Controls include connect/disc
 ## Dashboard
 
 Cards: total logs, computed ingestion rate, logs today, errors, active sources, and storage used, each with freshness/source metadata. Charts: rate/volume, severity, top hosts/apps/source IPs/facilities/formats. A shared time context makes requests concurrently and independently retryable. Metric cards derived from Prometheus are labeled separately from log-store statistics to avoid pretending different clocks are identical.
+Current implementation: the overview uses VictoriaLogs-backed aggregate statistics for the selected 15-minute to 30-day range. Cards show stored logs, stored error count, a one-minute average stored-event rate, and running configured listeners. The rate is not a raw ingestion-counter rate; ingestion counters remain available at `/metrics`. Volume, severity, and top-host panels use aggregate queries rather than a capped sample of search results.
+
 
 ## Data handling and performance
 
